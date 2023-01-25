@@ -9,6 +9,64 @@ import (
 	tt "github.bpcyber.com/vgarcia/threads/internal/testtools"
 )
 
+func TestForkAndWait(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("should run multiple workers in parallel", func(t *testing.T) {
+		var numCallsWorker1, numCallsWorker2 int
+		err := ForkAndWait(ctx,
+			func(ctx context.Context) error {
+				numCallsWorker1++
+				return nil
+			},
+			func(ctx context.Context) error {
+				numCallsWorker2++
+				return nil
+			},
+		)
+		tt.AssertNoErr(t, err)
+
+		tt.AssertEqual(t, numCallsWorker1, 1)
+		tt.AssertEqual(t, numCallsWorker2, 1)
+	})
+
+	t.Run("should should report errors correctly", func(t *testing.T) {
+		err := ForkAndWait(ctx,
+			func(ctx context.Context) error {
+				return fmt.Errorf("fakeErrMsg")
+			},
+			func(ctx context.Context) error {
+				return nil
+			},
+		)
+
+		tt.AssertErrContains(t, err, "fakeErrMsg")
+	})
+
+	t.Run("should forward panics to the waiting process correctly", func(t *testing.T) {
+		isCtxCanceled := make(chan struct{})
+
+		var err error
+		panicPayload := tt.PanicHandler(func() {
+			err = ForkAndWait(ctx,
+				func(ctx context.Context) error {
+					panic("fakePanicPayload")
+				},
+				func(ctx context.Context) error {
+					<-ctx.Done()
+					isCtxCanceled <- struct{}{}
+					return nil
+				},
+			)
+		})
+
+		tt.AssertNoErr(t, err)
+
+		tt.AssertDone(t, 10*time.Millisecond, isCtxCanceled)
+		tt.AssertContains(t, fmt.Sprint(panicPayload), "fakePanicPayload")
+	})
+}
+
 func TestNewGroup(t *testing.T) {
 	ctx := context.Background()
 	t.Run("should build correctly with a valid input context", func(t *testing.T) {
@@ -101,5 +159,28 @@ func TestGoAndWait(t *testing.T) {
 		err := g.Wait()
 		tt.AssertErrContains(t, err, "first-error")
 		tt.AssertEqual(t, itsDone, true)
+	})
+
+	t.Run("should forward panics to the waiting process correctly", func(t *testing.T) {
+		g := NewGroup(context.TODO())
+		g.Go(func(ctx context.Context) error {
+			panic("fakePanicPayload")
+		})
+
+		isCtxCanceled := make(chan struct{})
+		g.Go(func(ctx context.Context) error {
+			<-ctx.Done()
+			isCtxCanceled <- struct{}{}
+			return nil
+		})
+
+		var err error
+		panicPayload := tt.PanicHandler(func() {
+			err = g.Wait()
+		})
+		tt.AssertNoErr(t, err)
+
+		tt.AssertDone(t, 10*time.Millisecond, isCtxCanceled)
+		tt.AssertContains(t, fmt.Sprint(panicPayload), "fakePanicPayload")
 	})
 }
