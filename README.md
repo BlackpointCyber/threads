@@ -20,6 +20,36 @@ g.Go(threads.PeriodicWorker(10*time.Second, func(ctx context.Context) error {
 err := g.Wait()
 ```
 
+It also forwards panics from the goroutines to the
+waiting goroutine which can be useful in some situations:
+
+```go
+func main() {
+    defer func() {
+        if r := recover(); r != nil {
+            fmt.Println("panic forwarded to main:", r)
+        }
+    }
+    g := threads.NewGroup(ctx)
+
+    g.Go(func(ctx context.Context) error {
+	    panic("foo")
+    })
+
+    g.Go(func(ctx context.Context) error {
+        <-ctx.Done()
+        fmt.Println("context canceled because of the panic on the other goroutine")
+        return nil
+    })
+
+    // A panic on any of the Goroutines will cause g.Wait() to panic
+    // immediately without waiting for the remaining Goroutines, but they
+    // will still receive a cancel signal so they can make a graceful
+    // shutdown.
+    err := g.Wait()
+}
+```
+
 ## Features:
 
 This library allows you to:

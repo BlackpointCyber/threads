@@ -13,15 +13,6 @@ var ErrStartGracefulShutdown = fmt.Errorf("signal to stop the execution graceful
 
 type Worker func(ctx context.Context) error
 
-func ForkAndWait(ctx context.Context, fns ...Worker) error {
-	g := NewGroup(ctx)
-	for _, fn := range fns {
-		g.Go(fn)
-	}
-
-	return g.Wait()
-}
-
 type Group struct {
 	g      *errgroup.Group
 	ctx    context.Context
