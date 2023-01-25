@@ -60,6 +60,10 @@ func (g Group) Go(fn Worker) {
 
 func (g Group) Wait() error {
 	g.hasWaiter.Store(true)
+	// Set `hasWaiter` to false so that a follow up panic
+	// will not send the panicPayload to a channel
+	// no one is listening to:
+	defer g.hasWaiter.Store(false)
 
 	select {
 	case err := <-g.waitCh():
