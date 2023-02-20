@@ -61,15 +61,16 @@ This library allows you to:
 1. Create several Goroutines easily and wait for them to return
 2. If any of the Goroutines return an error this group cancels the context causing
    a graceful shutdown.
-3. If any of the Goroutines return an error the `.Wait()` method will return it
-   so it is easy to handle it.
+3. The graceful shutdown mechanism also simplifies the error handling as you can just
+   wait for the `.Wait()` function to return and handle the error at that point.
 4. If any of the Goroutines panics after `.Wait()` has been called the panic will
-   be forwarded from the original goroutine the the waiting Goroutine and panic again.
+   be forwarded from the original goroutine to the waiting Goroutine causing the `.Wait()`
+   function to panic.
    This is useful if you want to perform a graceful shutdown on the main goroutine for
    example.
 
 There is also a useful implementation of a PeriodicWorker that will repeatedly
-run the input function periodically using the given interval as a period.
+run the input function after a user provided interval.
 
 This worker is also useful because if the context is cancelled it will
 perform a graceful shutdown, so you don't have to write this behavior youself.
