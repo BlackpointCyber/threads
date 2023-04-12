@@ -1,6 +1,6 @@
-# Threads Helper
+# Threads
 
-This helper was created to provide an easy to use tool for managing groups of Goroutines
+Threads is an easy-to-use tool for managing groups of Goroutines
 in common use-cases.
 
 Example usage:
@@ -121,6 +121,33 @@ g.Go(threads.PeriodicWorker(1*time.Hour, func(ctx context.Context) error {
 }))
 
 g.Wait()
+```
+
+### Safe Functions
+
+**safe.Get** and **safe.Set** can be used to perform thread safe gets and sets on any variable
+passing a mux as its first argument e.g.:
+
+```golang
+mux := &sync.Mutex{}
+var shared int
+
+// Thread safe operations:
+v := safe.Get(mux, &shared)
+safe.Set(mux, &shared, v+1)
+```
+
+The **safe.Do** function is a convenient way of running any code inside
+a mutex Lock/Unlock window:
+
+```golang
+mux := &sync.Mutex{}
+var shared int
+
+// Thread safe operation:
+err := safe.Do(mux, func() error {
+  shared = shared + 1
+})
 ```
 
 ## LICENSE
