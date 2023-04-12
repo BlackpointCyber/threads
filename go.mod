@@ -1,4 +1,4 @@
-module github.bpcyber.com/vgarcia/threads
+module github.com/BlackpointCyber/threads
 
 go 1.18
 

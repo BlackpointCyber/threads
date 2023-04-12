@@ -24,37 +24,40 @@ It also forwards panics from the Goroutines to the
 waiting Goroutine which can be useful in some situations:
 
 ```go
-func main() {
-    defer func() {
-        if r := recover(); r != nil {
-            fmt.Println("panic forwarded to main:", r)
-        }
-    }
-    g := threads.NewGroup(ctx)
+defer func() {
+	if r := recover(); r != nil {
+		fmt.Println("panic forwarded to main:", r)
+	}
+}()
 
-    g.Go(func(ctx context.Context) error {
-	    panic("foo")
-    })
+ctx := context.Background()
 
-    g.Go(func(ctx context.Context) error {
-        <-ctx.Done()
-        fmt.Println("context canceled because of the panic on the other Goroutine")
-        return nil
-    })
+g := threads.NewGroup(ctx)
 
-    // A panic on any of the Goroutines will cause g.Wait() to panic
-    // immediately without waiting for the remaining Goroutines, but they
-    // will still receive a cancel signal so they can make a graceful
-    // shutdown.
-    err := g.Wait()
-}
+g.Go(func(ctx context.Context) error {
+	panic("foo")
+})
+
+g.Go(func(ctx context.Context) error {
+	<-ctx.Done()
+	fmt.Println("context canceled because of the panic on the other Goroutine")
+	return nil
+})
+
+// A panic on any of the Goroutines will cause g.Wait() to panic
+// immediately without waiting for the remaining Goroutines, but they
+// will still receive a cancel signal so they can make a graceful
+// shutdown.
+g.Wait()
+
+fmt.Println("not going to print this because of the panic")
 ```
 
 > Note: The panic redirection feature only works if you also call `g.Wait()`,
 > if a panic occurs before `g.Wait()` is called it will just go through as
 > it would on a normal Goroutine.
 
-## Features:
+## Main Features:
 
 This library allows you to:
 
@@ -69,11 +72,56 @@ This library allows you to:
    This is useful if you want to perform a graceful shutdown on the main goroutine for
    example.
 
-There is also a useful implementation of a PeriodicWorker that will repeatedly
-run the input function after a user provided interval.
+## Helper Functions
 
-This worker is also useful because if the context is cancelled it will
+### PeriodicWorker
+
+The `threads.PeriodicWorker` is a useful helper function that allows you to create
+a worker that will run periodically until it either returns an error or the context
+is cancelled, e.g.:
+
+```go
+g := threads.NewGroup(ctx)
+
+// A worker that runs immediately at start and then once every second:
+g.Go(threads.PeriodicWorker(1*time.Second, func(ctx context.Context) error {
+	fmt.Println("one second has passed: %v", time.Now())
+	return nil
+}))
+
+g.Wait()
+```
+
+This worker is particularly useful because if the context is cancelled it will
 perform a graceful shutdown, so you don't have to write this behavior youself.
+
+If you want to write unit tests for this worker there is a way of mocking
+the `time.After` call done inside of it:
+
+```go
+ctx, cancel := context.WithCancel(ctx)
+defer cancel()
+
+ctx = threads.ContextWithTimeAfterMock(ctx, func(triggerCh chan time.Time, waitCh chan time.Duration) {
+	<-waitCh                 // Wait until time.After is called
+	triggerCh <- time.Time{} // Makes <-time.After return
+	<-waitCh                 // Waits again
+	cancel()                 // Forces the worker to stop:
+})
+
+g := threads.NewGroup(ctx)
+
+// A worker that runs immediately at start and
+// then once again when triggerCh receives a message:
+count := 0
+g.Go(threads.PeriodicWorker(1*time.Hour, func(ctx context.Context) error {
+	count++
+	fmt.Printf("Run count: %v\n", count)
+	return nil
+}))
+
+g.Wait()
+```
 
 ## LICENSE
 

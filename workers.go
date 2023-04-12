@@ -10,6 +10,10 @@ func PeriodicWorker(
 	doWork Worker,
 ) Worker {
 	return func(ctx context.Context) error {
+		// This allows us to mock time.After using
+		// the ContextWithTimeMock function:
+		timeAfter := getTimeAfter(ctx)
+
 		for {
 			err := doWork(ctx)
 			if err != nil {
@@ -21,7 +25,7 @@ func PeriodicWorker(
 			select {
 			case <-ctx.Done():
 				return nil
-			case <-time.After(iterationInterval):
+			case <-timeAfter(iterationInterval):
 			}
 		}
 	}

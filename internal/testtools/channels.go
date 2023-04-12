@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-func AssertDone(t *testing.T, timeout time.Duration, doneCh chan struct{}) {
+func AssertDone(t *testing.T, timeout time.Duration, doneCh <-chan struct{}) {
 	select {
 	case <-time.After(timeout):
 		t.Fatalf("the done channel was not closed even after %v", timeout)

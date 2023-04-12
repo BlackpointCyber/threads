@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	tt "github.bpcyber.com/vgarcia/threads/internal/testtools"
+	tt "github.com/BlackpointCyber/threads/internal/testtools"
 )
 
 func TestNewGroup(t *testing.T) {
