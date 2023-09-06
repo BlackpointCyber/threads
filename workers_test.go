@@ -32,14 +32,14 @@ func TestPeriodicWorker(t *testing.T) {
 	})
 
 	t.Run("should run the callback imediately right after starting", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(ctx)
+		ctx, cancel := context.WithTimeout(ctx, 100*time.Microsecond)
 		defer cancel()
 
 		var timeAfterArgs []time.Duration
-		ctx = ContextWithTimeAfterMock(ctx, func(triggerCh chan time.Time, waitCh chan time.Duration) {
+		ctx = ContextWithTimeMock(ctx, tt.MockTimeAfter(func(triggerCh chan time.Time, waitCh chan time.Duration) {
 			timeAfterArgs = append(timeAfterArgs, <-waitCh)
 			cancel()
-		})
+		}))
 
 		var numCalls int
 		var g errgroup.Group
@@ -62,12 +62,12 @@ func TestPeriodicWorker(t *testing.T) {
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 
-		ctx = ContextWithTimeAfterMock(ctx, func(triggerCh chan time.Time, waitCh chan time.Duration) {
+		ctx = ContextWithTimeMock(ctx, tt.MockTimeAfter(func(triggerCh chan time.Time, waitCh chan time.Duration) {
 			<-waitCh
 			triggerCh <- time.Now()
 			<-waitCh
 			cancel()
-		})
+		}))
 
 		var numCalls int
 		go PeriodicWorker(time.Second, func(ctx context.Context) error {
@@ -77,5 +77,48 @@ func TestPeriodicWorker(t *testing.T) {
 
 		tt.AssertDone(t, 10*time.Millisecond, ctx.Done())
 		tt.AssertEqual(t, numCalls, 2)
+	})
+
+	t.Run("should wait a custom amount of time if it returns a retryError", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+
+		var timeAfterArgs []time.Duration
+		ctx = ContextWithTimeMock(ctx, tt.MockTimeAfter(func(triggerCh chan time.Time, waitCh chan time.Duration) {
+			timeAfterArgs = append(timeAfterArgs, <-waitCh)
+			cancel()
+		}))
+
+		go PeriodicWorker(42*time.Millisecond, func(ctx context.Context) error {
+			return RetryWorkerIn(4 * time.Millisecond)
+		})(ctx)
+
+		tt.AssertDone(t, 10*time.Millisecond, ctx.Done())
+		tt.AssertEqual(t, timeAfterArgs, []time.Duration{
+			4 * time.Millisecond,
+		})
+	})
+
+	t.Run("should change the interval if an adjustInterval error is returned", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+
+		var timeAfterArgs []time.Duration
+		ctx = ContextWithTimeMock(ctx, tt.MockTimeAfter(func(triggerCh chan time.Time, waitCh chan time.Duration) {
+			timeAfterArgs = append(timeAfterArgs, <-waitCh)
+			triggerCh <- time.Now()
+			timeAfterArgs = append(timeAfterArgs, <-waitCh)
+			cancel()
+		}))
+
+		go PeriodicWorker(2*time.Millisecond, func(ctx context.Context) error {
+			return AdjustInterval(4 * time.Millisecond)
+		})(ctx)
+
+		tt.AssertDone(t, 20*time.Millisecond, ctx.Done())
+		tt.AssertEqual(t, timeAfterArgs, []time.Duration{
+			2 * time.Millisecond,
+			4 * time.Millisecond,
+		})
 	})
 }

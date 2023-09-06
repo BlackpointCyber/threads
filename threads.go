@@ -2,7 +2,9 @@ package threads
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"runtime/debug"
 
 	"sync/atomic"
 
@@ -10,13 +12,26 @@ import (
 )
 
 var ErrStartGracefulShutdown = fmt.Errorf("signal to stop the execution gracefully")
+var ErrRestartGroup = fmt.Errorf("signal to restart the current threads.Group")
 
 type Worker func(ctx context.Context) error
+
+func ForkAndWait(ctx context.Context, fns ...Worker) error {
+	g := NewGroup(ctx)
+	for _, fn := range fns {
+		g.Go(fn)
+	}
+
+	return g.Wait()
+}
 
 type Group struct {
 	g      *errgroup.Group
 	ctx    context.Context
 	cancel func()
+
+	// A list of workers to restart if requested:
+	workers []Worker
 
 	hasWaiter *atomic.Bool
 	panicCh   chan any
@@ -34,12 +49,19 @@ func NewGroup(ctx context.Context) Group {
 	}
 }
 
-func (g Group) Go(fn Worker) {
+func (g *Group) Go(fn Worker) {
+	g.workers = append(g.workers, fn)
+
+	g.start(fn)
+}
+
+func (g Group) start(fn Worker) {
 	g.g.Go(func() error {
 		defer func() {
 			if r := recover(); r != nil {
 				g.cancel()
 				if g.hasWaiter.Load() {
+					r = fmt.Sprintf("%v\n%s", r, string(debug.Stack()))
 					g.panicCh <- r
 					return
 				}
@@ -60,17 +82,33 @@ func (g Group) Go(fn Worker) {
 
 func (g Group) Wait() error {
 	g.hasWaiter.Store(true)
-	// Set `hasWaiter` to false so that a follow up panic
-	// will not send the panicPayload to a channel
-	// no one is listening to:
-	defer g.hasWaiter.Store(false)
 
+restartTag:
 	select {
 	case err := <-g.waitCh():
+		if errors.Is(err, ErrRestartGroup) {
+			*g.g = errgroup.Group{}
+			for _, worker := range g.workers {
+				g.start(worker)
+			}
+
+			goto restartTag
+		}
+
 		return err
 	case panicPayload := <-g.panicCh:
 		panic(panicPayload)
 	}
+}
+
+func (g *Group) SubGroup(workers ...Worker) {
+	g.Go(func(ctx context.Context) error {
+		subg := NewGroup(ctx)
+		for _, worker := range workers {
+			subg.Go(worker)
+		}
+		return subg.Wait()
+	})
 }
 
 func (g Group) waitCh() chan error {

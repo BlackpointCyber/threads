@@ -15,3 +15,9 @@ func Set[T any](mux *sync.Mutex, ref *T, v T) {
 
 	*ref = v
 }
+
+func Do(mux *sync.Mutex, fn func()) {
+	mux.Lock()
+	defer mux.Unlock()
+	fn()
+}
