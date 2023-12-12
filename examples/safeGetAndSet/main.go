@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/BlackpointCyber/threads"
-	"github.com/BlackpointCyber/threads/safe"
+	"github.com/blackpointcyber/threads"
+	"github.com/blackpointcyber/threads/safe"
 )
 
 func main() {

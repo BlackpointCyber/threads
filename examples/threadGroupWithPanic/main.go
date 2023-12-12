@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/BlackpointCyber/threads"
+	"github.com/blackpointcyber/threads"
 )
 
 func main() {

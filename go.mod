@@ -1,4 +1,4 @@
-module github.com/BlackpointCyber/threads
+module github.com/blackpointcyber/threads
 
 go 1.18
 

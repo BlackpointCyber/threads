@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	tt "github.com/BlackpointCyber/threads/internal/testtools"
+	tt "github.com/blackpointcyber/threads/internal/testtools"
 	"golang.org/x/sync/errgroup"
 )
 
