@@ -191,7 +191,7 @@ func panickingWorker(ctx context.Context) error {
 func TestRestartGroup(t *testing.T) {
 	ctx := context.Background()
 
-	t.Run("should start restart the base group correctly", func(t *testing.T) {
+	t.Run("should restart the base group correctly", func(t *testing.T) {
 		var receivedClosureValues []string
 
 		g := NewGroup(ctx)
@@ -209,6 +209,32 @@ func TestRestartGroup(t *testing.T) {
 		tt.AssertNoErr(t, err)
 
 		tt.AssertEqual(t, receivedClosureValues, []string{"initialState", "changedState"})
+	})
+
+	t.Run("should not restart goroutines that had already been waited on", func(t *testing.T) {
+		var receivedClosureValues []string
+
+		g := NewGroup(ctx)
+		g.Go(func(ctx context.Context) error {
+			receivedClosureValues = append(receivedClosureValues, "onlyOnce")
+			return nil
+		})
+		g.Wait()
+
+		closureVar := "initialState"
+		g.Go(func(ctx context.Context) error {
+			receivedClosureValues = append(receivedClosureValues, closureVar)
+			if closureVar == "initialState" {
+				closureVar = "changedState"
+				return ErrRestartGroup
+			}
+			return nil
+		})
+
+		err := g.Wait()
+		tt.AssertNoErr(t, err)
+
+		tt.AssertEqual(t, receivedClosureValues, []string{"onlyOnce", "initialState", "changedState"})
 	})
 
 	t.Run("should create and restart subgroups correctly", func(t *testing.T) {

@@ -80,7 +80,10 @@ func (g Group) start(fn Worker) {
 	})
 }
 
-func (g Group) Wait() error {
+func (g *Group) Wait() error {
+	defer func() {
+		g.workers = []Worker{}
+	}()
 	g.hasWaiter.Store(true)
 
 restartTag:
