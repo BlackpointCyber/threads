@@ -237,6 +237,41 @@ func TestRestartGroup(t *testing.T) {
 		tt.AssertEqual(t, receivedClosureValues, []string{"onlyOnce", "initialState", "changedState"})
 	})
 
+	t.Run("if the ctx was canceled because an error was returned it should restore it to a new context", func(t *testing.T) {
+		var receivedClosureValues []string
+		var isCtxCanceled bool
+		var isCtxStillCancelable bool
+
+		g := NewGroup(ctx)
+
+		closureVar := "initialState"
+		g.Go(func(ctx context.Context) error {
+			receivedClosureValues = append(receivedClosureValues, closureVar)
+			if closureVar == "initialState" {
+				closureVar = "changedState"
+				return ErrRestartGroup
+			}
+
+			isCtxCanceled = ctx.Err() != nil
+
+			return fmt.Errorf("this should cause the context to be canceled for other Workers")
+		})
+		g.Go(func(ctx context.Context) error {
+			select {
+			case <-time.After(time.Second):
+			case <-ctx.Done():
+				isCtxStillCancelable = true
+			}
+			return nil
+		})
+
+		err := g.Wait()
+		tt.AssertErrContains(t, err, "this should cause the context to be canceled for other Workers")
+
+		tt.AssertEqual(t, isCtxCanceled, false, "expected the context not to be canceled after the restart")
+		tt.AssertEqual(t, isCtxStillCancelable, true, "expected to be possible to cancel the context after the restart")
+	})
+
 	t.Run("should create and restart subgroups correctly", func(t *testing.T) {
 		var receivedClosureValues []string
 

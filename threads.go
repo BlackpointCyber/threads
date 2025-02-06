@@ -26,9 +26,10 @@ func ForkAndWait(ctx context.Context, fns ...Worker) error {
 }
 
 type Group struct {
-	g      *errgroup.Group
-	ctx    context.Context
-	cancel func()
+	g         *errgroup.Group
+	ctx       context.Context
+	parentCtx context.Context
+	cancel    func()
 
 	// A list of workers to restart if requested:
 	workers []Worker
@@ -37,12 +38,13 @@ type Group struct {
 	panicCh   chan any
 }
 
-func NewGroup(ctx context.Context) Group {
-	ctx, cancel := context.WithCancel(ctx)
+func NewGroup(parentCtx context.Context) Group {
+	ctx, cancel := context.WithCancel(parentCtx)
 
 	return Group{
 		g:         &errgroup.Group{},
 		ctx:       ctx,
+		parentCtx: parentCtx,
 		cancel:    cancel,
 		hasWaiter: &atomic.Bool{},
 		panicCh:   make(chan any),
@@ -82,6 +84,7 @@ func (g Group) start(fn Worker) {
 
 func (g *Group) Wait() error {
 	defer func() {
+		g.resetGroup()
 		g.workers = []Worker{}
 	}()
 	g.hasWaiter.Store(true)
@@ -90,7 +93,8 @@ restartTag:
 	select {
 	case err := <-g.waitCh():
 		if errors.Is(err, ErrRestartGroup) {
-			*g.g = errgroup.Group{}
+			g.resetGroup()
+
 			for _, worker := range g.workers {
 				g.start(worker)
 			}
@@ -102,6 +106,11 @@ restartTag:
 	case panicPayload := <-g.panicCh:
 		panic(panicPayload)
 	}
+}
+
+func (g *Group) resetGroup() {
+	g.g = &errgroup.Group{}
+	g.ctx, g.cancel = context.WithCancel(g.parentCtx)
 }
 
 func (g *Group) SubGroup(workers ...Worker) {
